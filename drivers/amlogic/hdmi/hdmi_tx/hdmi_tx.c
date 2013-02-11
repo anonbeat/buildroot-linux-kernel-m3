@@ -1033,6 +1033,7 @@ hdmi_task_handle(void *data)
 
         if (hdmitx_device->hpd_event == 1)
         {
+	    printk("hdmi_task_handle\n");
 #ifdef HDMI_SINK_NO_EDID
             msleep(500);
 #endif
@@ -1041,11 +1042,7 @@ hdmi_task_handle(void *data)
                 hdmitx_edid_clear(hdmitx_device);
                 hdmitx_edid_parse(hdmitx_device);
                 {
-                    static unsigned flag = 1;
-                    if(flag){
-                        flag = 0;
-                        cec_node_init(hdmitx_device);
-                    }
+                   cec_node_init(hdmitx_device);
                 }
                 hdmitx_cec_dbg_print("\n-------function:%s,file:%s,line:%d-----\n",__FUNCTION__,__FILE__,__LINE__);
 #ifdef HDMI_SINK_NO_EDID
