@@ -199,9 +199,6 @@ int gpio_cansleep(unsigned gpio)
 void gpio_set_value_cansleep(unsigned gpio, int value)
 {
     /* Nothing. We don't have I2C/SPI GPIOs that are handled by AM_GPIO. */
-    gpio_bank_t bank = (gpio_bank_t)(gpio >> 16);
-    int bit = gpio & 0xFFFF;
-    set_gpio_val(bank, bit, value ? 1 : 0);
 }
 
 int gpio_is_valid(int number)
