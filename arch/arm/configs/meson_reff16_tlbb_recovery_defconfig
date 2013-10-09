@@ -890,7 +890,7 @@ CONFIG_SDIO=y
 #
 # AMLOGIC SPI NOR Flash  support
 #
-# CONFIG_AMLOGIC_SPI_NOR is not set
+CONFIG_AMLOGIC_SPI_NOR=y
 
 #
 # AMLOGIC NAND Flash support
