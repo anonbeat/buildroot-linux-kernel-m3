@@ -94,9 +94,9 @@
 
 // POWERSUPPLIES
 #define GPIO_PWR_WIFI  GPIO_C(5)
-//#define GPIO_PWR_VCCIO  GPIO_AO(2)
-//#define GPIO_PWR_VCCx2  GPIO_AO(6)
-//#define GPIO_PWR_HDMI   GPIO_D(6)
+#define GPIO_PWR_VCCIO  GPIO_AO(2)
+#define GPIO_PWR_VCCx2  GPIO_AO(6)
+#define GPIO_PWR_HDMI   GPIO_D(6)
 
 #if defined(CONFIG_LEDS_GPIO)
 /* LED Class Support for the leds */
@@ -3009,49 +3009,19 @@ static void disable_unused_model(void)
  }
 static void __init power_hold(void)
 {
-    printk(KERN_INFO "power hold set high!\n");
-  //  set_gpio_val(GPIOAO_bank_bit0_11(6), GPIOAO_bit_bit0_11(6), 1);
-  //  set_gpio_mode(GPIOAO_bank_bit0_11(6), GPIOAO_bit_bit0_11(6), GPIO_OUTPUT_MODE);
+	printk(KERN_INFO "power hold set high!\n");
 
-        // VCC5V
-        set_gpio_mode(GPIOD_bank_bit0_9(9), GPIOD_bit_bit0_9(9), GPIO_OUTPUT_MODE);
-        set_gpio_val(GPIOD_bank_bit0_9(9), GPIOD_bit_bit0_9(9), 1);
-		 // hdmi power on
-        set_gpio_mode(GPIOD_bank_bit0_9(6), GPIOD_bit_bit0_9(6), GPIO_OUTPUT_MODE);
-        set_gpio_val(GPIOD_bank_bit0_9(6), GPIOD_bit_bit0_9(6), 1);
+	printk(KERN_INFO "set_vccio and set_vccx2 power up\n");
+	// VCCIO +3V3 -- GPIO AO2, ACTIVE HIGH
+	gpio_direction_output( GPIO_PWR_VCCIO, 1);
 
-		// MUTE
-       set_gpio_mode(GPIOX_bank_bit0_31(29), GPIOX_bit_bit0_31(29), GPIO_OUTPUT_MODE);
-       set_gpio_val(GPIOX_bank_bit0_31(29), GPIOX_bit_bit0_31(29), 0);
+	// VCCx2 +5V -- GPIO AO6, ACTIVE low.
+	gpio_direction_output( GPIO_PWR_VCCx2, 0);
+ 
+	printk(KERN_INFO "set_hdmi power up\n");
+	// HDMI Power +5V -- GPIO D6, ACTIVE HIGH
+	gpio_direction_output( GPIO_PWR_HDMI, 1);	
 
-      // PC Link
-//       set_gpio_mode(GPIOC_bank_bit0_15(4), GPIOC_bit_bit0_15(4), GPIO_OUTPUT_MODE);
-//       set_gpio_val(GPIOC_bank_bit0_15(4), GPIOC_bit_bit0_15(4), 1);
-			 
-		// VCC, set to high when suspend 
-        set_gpio_mode(GPIOAO_bank_bit0_11(4), GPIOAO_bit_bit0_11(4), GPIO_OUTPUT_MODE);
-        set_gpio_val(GPIOAO_bank_bit0_11(4), GPIOAO_bit_bit0_11(4), 0);
-        set_gpio_mode(GPIOAO_bank_bit0_11(5), GPIOAO_bit_bit0_11(5), GPIO_OUTPUT_MODE);
-        set_gpio_val(GPIOAO_bank_bit0_11(5), GPIOAO_bit_bit0_11(5), 0);
-
-     // VCCK
-        set_gpio_mode(GPIOAO_bank_bit0_11(6), GPIOAO_bit_bit0_11(6), GPIO_OUTPUT_MODE);
-        set_gpio_val(GPIOAO_bank_bit0_11(6), GPIOAO_bit_bit0_11(6), 1);
-	 // VCCIO
-        set_gpio_mode(GPIOAO_bank_bit0_11(2), GPIOAO_bit_bit0_11(2), GPIO_OUTPUT_MODE);
-        set_gpio_val(GPIOAO_bank_bit0_11(2), GPIOAO_bit_bit0_11(2), 1);
-
-    //init sata
-#if defined(CONFIG_ATA)
-    set_gpio_mode(GPIOC_bank_bit0_15(7), GPIOC_bit_bit0_15(7), GPIO_OUTPUT_MODE);
-    set_gpio_val(GPIOC_bank_bit0_15(7), GPIOC_bit_bit0_15(7), 1);
-#endif
-	
-    //VCCx2 power up
-    printk(KERN_INFO "set_vccx2 power up\n");
-//    set_gpio_mode(GPIOA_bank_bit0_27(26), GPIOA_bit_bit0_27(26), GPIO_OUTPUT_MODE);
-//    set_gpio_val(GPIOA_bank_bit0_27(26), GPIOA_bit_bit0_27(26), 0);
-	
 	// Turn On Wifi Power. So the wifi-module can be detected.
 	extern_usb_wifi_power(1);
 
@@ -3107,9 +3077,9 @@ static __init void m1_init_machine(void)
     platform_add_devices(platform_devs, ARRAY_SIZE(platform_devs));
 
 #ifdef CONFIG_USB_DWC_OTG_HCD
-    printk("***m1_init_machine: usb set mode.\n");
+    printk("***m3_init_machine: usb set mode.\n");
     set_usb_phy_clk(USB_PHY_CLOCK_SEL_XTAL_DIV2);
-//	set_usb_phy_id_mode(USB_PHY_PORT_A, USB_PHY_MODE_SW_HOST);
+    set_usb_phy_id_mode(USB_PHY_PORT_A, USB_PHY_MODE_SW_HOST);
     lm_device_register(&usb_ld_a);
   	set_usb_phy_id_mode(USB_PHY_PORT_B,USB_PHY_MODE_SW_HOST);
     lm_device_register(&usb_ld_b);
