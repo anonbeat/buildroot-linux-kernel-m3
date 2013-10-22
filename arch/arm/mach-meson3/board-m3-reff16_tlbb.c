@@ -361,12 +361,12 @@ static struct mtd_partition spi_partition_info[] = {
         .offset = 0x80000,
         .size = 0x2000,
 },
+    /* Hide recovery partition
     {
 	.name = "hashtable",
 	.offset = 0x100000,
 	.size = 0x2000,
     },
-    /* Hide recovery partition
             {
                     .name = "recovery",
                     .offset = 0x40000,
@@ -609,33 +609,33 @@ static struct mtd_partition multi_partition_info_1G_or_More[] =
 #ifdef CONFIG_AML_NAND_ENV
     {
 	.name = "boot_env",
-	.offset = (12)*1024*1024,
+	.offset = 8*1024*1024,
 	.size = 4*1024*1024,
     },
 #endif
     {
 	.name = "aml_logo",
-	.offset = (16)*1024*1024,
+	.offset = 12*1024*1024,
 	.size = 16*1024*1024,
     },
     {
         .name = "recovery",
-        .offset = (16+16)*1024*1024,
+        .offset = 28*1024*1024,
         .size = 16*1024*1024,
     },
     {
         .name = "boot",
-        .offset = (16+16+16)*1024*1024,
+        .offset = 44*1024*1024,
         .size = 20*1024*1024,
     },
 	{
         .name = "system",
-        .offset = (16+16+16+20)*1024*1024,
+        .offset = 64*1024*1024,
         .size = 512*1024*1024,
     },
     {
         .name = "cache",
-        .offset = (16+16+16+20+512)*1024*1024,
+        .offset = 576*1024*1024,
         .size = 192*1024*1024,
     },
 #ifdef CONFIG_AML_NFTL
