@@ -97,11 +97,14 @@ static void set_vid_pll_div(unsigned div)
     WRITE_CBUS_REG_BITS(HHI_VID_DIVIDER_CNTL, 0, 0, 2);
     WRITE_CBUS_REG_BITS(HHI_VID_DIVIDER_CNTL, 1, 3, 1);
     WRITE_CBUS_REG_BITS(HHI_VID_DIVIDER_CNTL, 1, 7, 1);
+
+    // adjust the sequence according to VLSI's suggestion
+    // Gate enable
+    WRITE_CBUS_REG_BITS(HHI_VID_DIVIDER_CNTL, 1, 16, 1);
+
     WRITE_CBUS_REG_BITS(HHI_VID_DIVIDER_CNTL, 3, 0, 2);
     WRITE_CBUS_REG_BITS(HHI_VID_DIVIDER_CNTL, 0, 3, 1);
     WRITE_CBUS_REG_BITS(HHI_VID_DIVIDER_CNTL, 0, 7, 1);
-    // Gate enable
-    WRITE_CBUS_REG_BITS(HHI_VID_DIVIDER_CNTL, 1, 16, 1);
 }
 
 static void set_clk_final_div(unsigned div)
@@ -155,21 +158,48 @@ static void set_vdac1_div(unsigned div)
     WRITE_CBUS_REG_BITS(HHI_VIID_CLK_DIV, div, 24, 4);
 }
 
+// when hpll VCO outputs 1488MHz
+// we should set HPLL_CLK_OUT_DIG as half
+// and change vid_pll_div_pre from 5 to 0
+//     change vid_pll_div_post form 2 to 5
+static void reset_hpll_div(void)
+{
+    WRITE_CBUS_REG_BITS(HHI_VID_PLL_CNTL, 1, 16, 2);                  // [17:16] OD_LVDS, set to 1
+    WRITE_CBUS_REG_BITS(HHI_VID_DIVIDER_CNTL, 0, 4, 3);               // set vid_pll_div_pre as 0
+    WRITE_CBUS_REG_BITS(HHI_VID_DIVIDER_CNTL, 4, 12, 3);              // set vid_pll_div_post as 5
+
+    // Gate disable
+    WRITE_CBUS_REG_BITS(HHI_VID_DIVIDER_CNTL, 0, 16, 1);
+
+    // Soft Reset div_post/div_pre
+    WRITE_CBUS_REG_BITS(HHI_VID_DIVIDER_CNTL, 0, 0, 2);
+    WRITE_CBUS_REG_BITS(HHI_VID_DIVIDER_CNTL, 1, 3, 1);
+    WRITE_CBUS_REG_BITS(HHI_VID_DIVIDER_CNTL, 1, 7, 1);
+
+    // Gate enable
+    WRITE_CBUS_REG_BITS(HHI_VID_DIVIDER_CNTL, 1, 16, 1);
+
+    WRITE_CBUS_REG_BITS(HHI_VID_DIVIDER_CNTL, 3, 0, 2);
+    WRITE_CBUS_REG_BITS(HHI_VID_DIVIDER_CNTL, 0, 3, 1);
+    WRITE_CBUS_REG_BITS(HHI_VID_DIVIDER_CNTL, 0, 7, 1);
+}
+
 // mode hpll_clk_out hpll_hdmi_od viu_path viu_type vid_pll_div clk_final_div
 // hdmi_tx_pixel_div unsigned encp_div unsigned enci_div unsigned enct_div unsigned ecnl_div;
 static enc_clk_val_t setting_enc_clk_val[] = {
-    {VMODE_480I,       1080, 4, 1, VIU_ENCI,  5, 4, 2,-1,  2, -1, -1,  2,  2},
-    {VMODE_480CVBS,    1080, 4, 1, VIU_ENCI,  5, 4, 2,-1,  2, -1, -1,  2,  2},
-    {VMODE_480P,       1080, 4, 1, VIU_ENCP,  5, 4, 2, 1, -1, -1, -1,  1,  1},
-    {VMODE_576I,       1080, 4, 1, VIU_ENCI,  5, 4, 2,-1,  2, -1, -1,  2,  2},
-    {VMODE_576CVBS,    1080, 4, 1, VIU_ENCI,  5, 4, 2,-1,  2, -1, -1,  2,  2},
-    {VMODE_576P,       1080, 4, 1, VIU_ENCP,  5, 4, 2, 1, -1, -1, -1,  1,  1},
-    {VMODE_720P,       1488, 2, 1, VIU_ENCP, 10, 1, 2, 1, -1, -1, -1,  1,  1},
-    {VMODE_1080I,      1488, 2, 1, VIU_ENCP, 10, 1, 2, 1, -1, -1, -1,  1,  1},
-    {VMODE_1080P,      1488, 1, 1, VIU_ENCP, 10, 1, 1, 1, -1, -1, -1,  1,  1},
-    {VMODE_720P_50HZ,  1488, 2, 1, VIU_ENCP, 10, 1, 2, 1, -1, -1, -1,  1,  1},
-    {VMODE_1080I_50HZ, 1488, 2, 1, VIU_ENCP, 10, 1, 2, 1, -1, -1, -1,  1,  1},
-    {VMODE_1080P_50HZ, 1488, 1, 1, VIU_ENCP, 10, 1, 1, 1, -1, -1, -1,  1,  1},
+    {VMODE_480I,       1080, 4, 1, VIU_ENCI,  5, 4, 2,-1,  2, -1, -1,  2,  -1},
+    {VMODE_480CVBS,    1080, 4, 1, VIU_ENCI,  5, 4, 2,-1,  2, -1, -1,  2,  -1},
+    {VMODE_480P,       1080, 4, 1, VIU_ENCP,  5, 4, 2, 1, -1, -1, -1,  1,  -1},
+    {VMODE_576I,       1080, 4, 1, VIU_ENCI,  5, 4, 2,-1,  2, -1, -1,  2,  -1},
+    {VMODE_576CVBS,    1080, 4, 1, VIU_ENCI,  5, 4, 2,-1,  2, -1, -1,  2,  -1},
+    {VMODE_576P,       1080, 4, 1, VIU_ENCP,  5, 4, 2, 1, -1, -1, -1,  1,  -1},
+    {VMODE_720P,       1488, 2, 1, VIU_ENCP, 10, 1, 2, 1, -1, -1, -1,  1,  -1},
+    {VMODE_1080I,      1488, 2, 1, VIU_ENCP, 10, 1, 2, 1, -1, -1, -1,  1,  -1},
+    {VMODE_1080P,      1488, 1, 1, VIU_ENCP, 10, 1, 1, 1, -1, -1, -1,  1,  -1},
+    {VMODE_720P_50HZ,  1488, 2, 1, VIU_ENCP, 10, 1, 2, 1, -1, -1, -1,  1,  -1},
+    {VMODE_1080I_50HZ, 1488, 2, 1, VIU_ENCP, 10, 1, 2, 1, -1, -1, -1,  1,  -1},
+    {VMODE_1080P_50HZ, 1488, 1, 1, VIU_ENCP, 10, 1, 1, 1, -1, -1, -1,  1,  -1},
+    {VMODE_1080P_24HZ, 1488, 2, 1, VIU_ENCP, 10, 2, 1, 1, -1, -1, -1,  1,  -1},
 };
 
 void set_vmode_clk(vmode_t mode)
@@ -195,7 +225,27 @@ void set_vmode_clk(vmode_t mode)
     set_encl_div(p_enc[j].encl_div);
     set_vdac0_div(p_enc[j].vdac0_div);
     set_vdac1_div(p_enc[j].vdac1_div);
-    
+
+    switch(mode) {
+        case VMODE_720P:
+        case VMODE_1080I:
+        case VMODE_1080P:
+        case VMODE_720P_50HZ:
+        case VMODE_1080I_50HZ:
+        case VMODE_1080P_50HZ:
+            reset_hpll_div();
+            break;
+        default:
+            break;
+    }
+
+    // If VCO outputs 1488, then we will reset it to exact 1485
+    // please note, don't forget to re-config CNTL2
+    if((READ_CBUS_REG(HHI_VID_PLL_CNTL) & 0x7fff) == 0x43e) {
+        WRITE_CBUS_REG_BITS(HHI_VID_PLL_CNTL, 0x21ef, 0, 14);
+        WRITE_CBUS_REG(HHI_VID_PLL_CNTL2, 0xec0033);
+    }
+
 // For debug only
 #if 0
     printk("hdmi debug tag\n%s\n%s[%d]\n", __FILE__, __FUNCTION__, __LINE__);
@@ -254,4 +304,6 @@ void set_vmode_clk(vmode_t mode)
     PP(AM_RING_OSC_CLK_OUT1 );
     PP(AM_RING_OSC_CLK_OUT0 );
 #endif
-} 
+}
+ 
+

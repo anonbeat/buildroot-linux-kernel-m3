@@ -49,7 +49,7 @@ typedef struct{
 vfm_map_t* vfm_map[VFM_MAP_COUNT];
 static int vfm_map_num = 0;
 
-int vfm_debug_flag = 1;
+int vfm_debug_flag = 0;
 
 void vf_update_active_map(void)
 {
@@ -255,7 +255,7 @@ static void vfm_init(void)
 {
 #ifdef CONFIG_POST_PROCESS_MANAGER
     char def_id[] = "default";
-    char def_name_chain[] = "decoder ppmgr amvideo";
+    char def_name_chain[] = "decoder ppmgr deinterlace amvideo";
 #else
     char def_id[] = "default";
     char def_name_chain[] = "decoder amvideo";

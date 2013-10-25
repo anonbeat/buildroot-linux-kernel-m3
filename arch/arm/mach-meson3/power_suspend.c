@@ -47,34 +47,27 @@
 
 void disable_watchdog(void)
 {
-#ifdef CONFIG_SUSPEND_WATCHDOG
 	//printk(KERN_INFO "** disable watchdog\n");
 	WRITE_MPEG_REG(WATCHDOG_RESET, 0);
 	CLEAR_MPEG_REG_MASK(WATCHDOG_TC,(1 << WATCHDOG_ENABLE_BIT));
-#endif
 }
-EXPORT_SYMBOL(disable_watchdog);
+EXPORT_SYSMBOL(disable_watchdog);
 
 void enable_watchdog(void)
 {
-#ifdef CONFIG_SUSPEND_WATCHDOG
 	//printk(KERN_INFO "** enable watchdog\n");
 	WRITE_MPEG_REG(WATCHDOG_RESET, 0);
 	WRITE_MPEG_REG(WATCHDOG_TC, 1 << WATCHDOG_ENABLE_BIT | 0xFFFFF);//about 10sec
-#endif
 }
-EXPORT_SYMBOL(enable_watchdog);
+EXPORT_SYSMBOL(enable_watchdog);
 
 void reset_watchdog(void)
 {
-#ifdef CONFIG_SUSPEND_WATCHDOG
 	//printk(KERN_INFO "** reset watchdog\n");
 	WRITE_MPEG_REG(WATCHDOG_RESET, 0);	
-#endif
 }
-EXPORT_SYMBOL(reset_watchdog);
+EXPORT_SYSMBOL(reset_watchdog);
 
-#ifdef CONFIG_AML_SUSPEND
 int meson_power_suspend()
 {
 	static int test_flag = 0;
@@ -103,4 +96,3 @@ int meson_power_suspend()
 #endif
 	return 0;
 }
-#endif

@@ -14,6 +14,7 @@ obj-$(CONFIG_POST_PROCESS_MANAGER) += ppmgr/
 
 #####for Basic drivers#####
  
+obj-y += secure/
 
 obj-y += uart/
 
@@ -46,7 +47,7 @@ obj-$(CONFIG_JPEGLOGO) += jpeglogo/
 
 obj-$(CONFIG_CARDREADER) += cardreader/
 
-obj-$(CONFIG_MALI) += mali/
+obj-$(CONFIG_MALI400) += mali/
 
 obj-$(CONFIG_UMP) += ump/
 
@@ -73,11 +74,17 @@ obj-$(CONFIG_AMAUDIO) += amaudio/
 
 obj-y += hdmi/
 
+ifeq ($(CONFIG_AM_NEW_TV_ARCH),y)
+obj-$(CONFIG_AM_DVB) += dvb_tv/
+else
 obj-$(CONFIG_AM_DVB) += dvb/
+endif
 
 obj-$(CONFIG_AM_SMARTCARD) += smartcard/
 
+ifneq ($(CONFIG_AM_NEW_TV_ARCH),y)
 obj-y += demod/
+endif
 
 obj-y += wifi/
 obj-y += bluetooth/

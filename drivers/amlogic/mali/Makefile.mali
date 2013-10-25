@@ -8,24 +8,72 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #
 
-# The Makefile sets up "arch" based on the CONFIG, creates the version info
-# string and the __malidrv_build_info.c file, and then call the Linux build
-# system to actually build the driver. After that point the Kbuild file takes
-# over.
+UMP_FILE_PREFIX =
+UDD_FILE_PREFIX = ../mali/
+TOP=$(dir $(realpath $(lastword $(MAKEFILE_LIST))))
 
-# set up defaults if not defined by the user
-ARCH ?= arm
-
-OSKOS=linux
-FILES_PREFIX=
-
-# This conditional makefile exports the global definition ARM_INTERNAL_BUILD. Customer releases will not include arm_internal.mak
--include ../../../arm_internal.mak
-
-ifeq ($(USING_UMP),1)
-	UMP_SYMVERS_FILE = ../ump/Module.symvers
-	KBUILD_EXTRA_SYMBOLS = $(srctree)/$(src)/$(UMP_SYMVERS_FILE)
+ifneq ($(KBUILD_EXTMOD),)
+include $(KBUILD_EXTMOD)/Makefile.common
+else
+KBUILD_EXTMOD = $(TOP)
+include $(TOP)/Makefile.common
 endif
+
+# For each arch check: CROSS_COMPILE , KDIR , CFLAGS += -DARCH
+
+ARCH ?= arm
+USING_MMU ?= 1
+USING_UMP := 1
+TARGET_PLATFORM ?= aml-meson
+CONFIG ?= aml-meson-m400-1
+BUILD ?= debug
+
+EXTRA_CFLAGS += -DDEBUG -DMALI_STATE_TRACKING=0
+ifeq ($(BUILD), debug)
+EXTRA_CFLAGS += -DDEBUG
+endif
+
+# linux build system integration
+
+ifneq ($(KERNELRELEASE),)
+# Inside the kernel build system
+
+EXTRA_CFLAGS += -I$(TOP) -I$(TOP)/common -I$(TOP)/linux -I$(TOP)/../mali/common -I$(TOP)/../mali/linux -I$(TOP)/include/ump
+
+# For customer releases the Linux Device Drivers will be provided as ARM proprietary and GPL releases:
+# The ARM proprietary product will only include the license/proprietary directory
+# The GPL product will only include the license/gpl directory
+
+ifeq ($(wildcard $(TOP)/linux/license/gpl/*),)
+EXTRA_CFLAGS += -I$(TOP)/linux/license/proprietary
+else
+EXTRA_CFLAGS += -I$(TOP)/linux/license/gpl
+endif
+
+SRC +=	$(UMP_FILE_PREFIX)linux/ump_kernel_linux.c \
+	$(UMP_FILE_PREFIX)linux/ump_kernel_memory_backend_os.c \
+	$(UMP_FILE_PREFIX)linux/ump_kernel_memory_backend_dedicated.c \
+	$(UMP_FILE_PREFIX)linux/ump_memory_backend.c \
+	$(UMP_FILE_PREFIX)linux/ump_ukk_wrappers.c \
+	$(UMP_FILE_PREFIX)linux/ump_ukk_ref_wrappers.c \
+	$(UMP_FILE_PREFIX)linux/ump_osk_atomics.c \
+	$(UMP_FILE_PREFIX)linux/ump_osk_low_level_mem.c \
+	$(UMP_FILE_PREFIX)linux/ump_osk_misc.c \
+	$(UDD_FILE_PREFIX)linux/mali_osk_atomics.c \
+	$(UDD_FILE_PREFIX)linux/mali_osk_locks.c \
+	$(UDD_FILE_PREFIX)linux/mali_osk_memory.c \
+	$(UDD_FILE_PREFIX)linux/mali_osk_math.c \
+	$(UDD_FILE_PREFIX)linux/mali_osk_misc.c
+
+# Selecting files to compile by parsing the config file
+
+MODULE:=ump.ko
+
+obj-m := $(MODULE:.ko=.o)
+$(MODULE:.ko=-y) := $(SRC:.c=.o)
+
+else
+# Outside the kernel build system
 
 # Get any user defined KDIR-<names> or maybe even a hardcoded KDIR
 -include KDIR_CONFIGURATION
@@ -37,38 +85,41 @@ ifeq ($(ARCH), arm)
 	# when compiling for ARM we're cross compiling
 	export CROSS_COMPILE ?= arm-none-linux-gnueabi-
 	# default to Virtex5
-	CONFIG ?= aml-meson-m400-1
+	CONFIG ?= pb-virtex5
 else
 	# Compiling for the host
 	CONFIG ?= $(shell uname -m)
 endif
 
 # default cpu to select
-CPU ?= pb11mp
+CPU ?= ct11mp
 
 # look up KDIR based om CPU selection
 KDIR ?= $(KDIR-$(CPU))
 
-# validate lookup result
 ifeq ($(KDIR),)
 $(error No KDIR found for platform $(CPU))
 endif
 
-# report detected/selected settings
-ifdef ARM_INTERNAL_BUILD
-$(warning Config $(CONFIG))
-$(warning Host CPU $(CPU))
-$(warning OS_MEMORY $(USING_OS_MEMORY))
+# Validate selected config
+ifneq ($(shell [ -d arch-$(CONFIG) ] && [ -f arch-$(CONFIG)/config.h ] && echo "OK"), OK)
+$(warning Current directory is $(shell pwd))
+$(error No configuration found for config $(CONFIG). Check that arch-$(CONFIG)/config.h exists)
+else
+# Link arch to the selected arch-config directory
+$(shell [ -L arch ] && rm arch)
+$(shell ln -sf arch-$(CONFIG) arch)
+$(shell touch arch/config.h)
 endif
 
-all: $(UMP_SYMVERS_FILE)
+all:
 	$(MAKE) ARCH=$(ARCH) -C $(KDIR) M=$(CURDIR) modules
-	@rm $(FILES_PREFIX)__malidrv_build_info.c $(FILES_PREFIX)__malidrv_build_info.o
-
-clean:
-	$(MAKE) ARCH=$(ARCH) -C $(KDIR) M=$(CURDIR) clean
 
 kernelrelease:
 	$(MAKE) -C $(KDIR) kernelrelease
 
-export CONFIG KBUILD_EXTRA_SYMBOLS
+clean:
+	$(MAKE) ARCH=$(ARCH) -C $(KDIR) M=$(CURDIR) clean
+	$(MAKE) ARCH=$(ARCH) -C $(KDIR) M=$(CURDIR)/../mali clean
+
+endif

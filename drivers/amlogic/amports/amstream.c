@@ -919,6 +919,20 @@ static int amstream_release(struct inode *inode, struct file *file)
     if (this->flag & PORT_FLAG_INITED) {
         amstream_port_release(this);
     }
+	
+    if ((this->type & (PORT_TYPE_AUDIO | PORT_TYPE_VIDEO)) == PORT_TYPE_AUDIO) {
+        s32 i;
+        stream_port_t *s;
+        for (s = &ports[0], i = 0; i < MAX_PORT_NUM; i++, s++) {
+            if ((s->flag & PORT_FLAG_IN_USE) && (s->type & PORT_TYPE_VIDEO)) {
+                break;
+            }
+        }
+        if (i == MAX_PORT_NUM) {
+            tsync_stat_reset();
+        }
+    }
+
     this->flag = 0;
 
     timestamp_pcrscr_set(0);
@@ -1080,15 +1094,6 @@ static int amstream_ioctl(struct inode *inode, struct file *file,
     case AMSTREAM_IOC_SYSINFO:
         if (this->type & PORT_TYPE_VIDEO) {
             copy_from_user((void *)&amstream_dec_info, (void *)arg, sizeof(amstream_dec_info));
-            printk("amstream_dec_info.format(0x%x)\n", amstream_dec_info.format);
-            printk("amstream_dec_info.width (0x%x)\n", amstream_dec_info.width);
-            printk("amstream_dec_info.height(0x%x)\n", amstream_dec_info.height);
-            printk("amstream_dec_info.rate  (0x%x)\n", amstream_dec_info.rate);
-            printk("amstream_dec_info.extra (0x%x)\n", amstream_dec_info.extra);
-            printk("amstream_dec_info.status(0x%x)\n", amstream_dec_info.status);
-            printk("amstream_dec_info.ratio (0x%x)\n", amstream_dec_info.ratio);
-            printk("amstream_dec_info.param (0x%p)\n", amstream_dec_info.param);
-            printk("amstream_dec_info.ratio64(0x%llx)\n", amstream_dec_info.ratio64);
         } else {
             r = -EINVAL;
         }
@@ -1312,6 +1317,60 @@ static int amstream_ioctl(struct inode *inode, struct file *file,
     case AMSTREAM_IOC_SET_DEMUX:
         tsdemux_set_demux((int)arg);
         break;
+    case AMSTREAM_IOC_SET_VIDEO_DELAY_LIMIT_MS:
+        bufs[BUF_TYPE_VIDEO].max_buffer_delay_ms = (int)arg;
+        break;
+	case AMSTREAM_IOC_SET_AUDIO_DELAY_LIMIT_MS:
+        bufs[BUF_TYPE_AUDIO].max_buffer_delay_ms = (int)arg;
+        break;
+	case AMSTREAM_IOC_GET_VIDEO_DELAY_LIMIT_MS:
+        put_user(bufs[BUF_TYPE_VIDEO].max_buffer_delay_ms,(int *)arg);
+        break;
+	case AMSTREAM_IOC_GET_AUDIO_DELAY_LIMIT_MS:
+        put_user(bufs[BUF_TYPE_AUDIO].max_buffer_delay_ms,(int *)arg);
+        break;		
+	case AMSTREAM_IOC_GET_VIDEO_CUR_DELAY_MS:
+		{
+		int delay;
+		delay=calculation_stream_delayed_ms(PTS_TYPE_VIDEO,NULL,NULL);
+		if(delay>=0)
+			put_user(delay,(int *)arg);
+		else 
+			put_user(0,(int *)arg);
+        break;
+		}
+	case AMSTREAM_IOC_GET_AUDIO_CUR_DELAY_MS:
+		{
+		int delay;
+		delay=calculation_stream_delayed_ms(PTS_TYPE_AUDIO,NULL,NULL);
+		if(delay>=0)
+			put_user(delay,(int *)arg);
+		else 
+			put_user(0,(int *)arg);
+        break;
+		}
+	case AMSTREAM_IOC_GET_AUDIO_AVG_BITRATE_BPS:
+		{
+		int delay;
+		u32 avgbps;
+		delay=calculation_stream_delayed_ms(PTS_TYPE_AUDIO,NULL,&avgbps);
+		if(delay>=0)
+			put_user(avgbps,(int *)arg);
+		else 
+			put_user(0,(int *)arg);
+        break;
+		}
+	case AMSTREAM_IOC_GET_VIDEO_AVG_BITRATE_BPS:
+		{
+		int delay;
+		u32 avgbps;
+		delay=calculation_stream_delayed_ms(PTS_TYPE_VIDEO,NULL,&avgbps);
+		if(delay>=0)
+			put_user(avgbps,(int *)arg);
+		else 
+			put_user(0,(int *)arg);
+        break;		
+		}
     default:
         r = -ENOIOCTLCMD;
     }
@@ -1439,8 +1498,18 @@ static ssize_t bufs_show(struct class *class, struct class_attribute *attr, char
         }
 
         pbuf += sprintf(pbuf, "\tbuf first_stamp:%#x\n", p->first_tstamp);
-
         pbuf += sprintf(pbuf, "\tbuf wcnt:%#x\n\n", p->wcnt);
+		
+		pbuf += sprintf(pbuf, "\tbuf max_buffer_delay_ms:%dms\n", p->max_buffer_delay_ms);
+		{
+			int calc_delayms=0;
+			u32 bitrate=0,avg_bitrate=0;
+			calc_delayms=calculation_stream_delayed_ms(p->type,&bitrate,&avg_bitrate);
+			if(calc_delayms>0){
+		    	pbuf += sprintf(pbuf, "\tbuf current delay:%dms\n",calc_delayms);
+		    	pbuf += sprintf(pbuf, "\tbuf bitrate latest:%dbps,avg:%dbps\n",bitrate,avg_bitrate);
+			}
+		}
     }
     return pbuf - buf;
 }
@@ -1475,11 +1544,37 @@ static ssize_t store_karaok(struct class *class, struct class_attribute *attr, c
     return size;
 }
 
+static ssize_t store_maxdelay(struct class *class, struct class_attribute *attr, const char *buf, size_t size)
+
+{
+    unsigned val;
+    ssize_t ret;
+	int i;
+
+    ret = sscanf(buf, "%d", &val);     
+    if(ret != 1 ) {
+        return -EINVAL;
+    }  
+	for (i = 0; i < sizeof(bufs) / sizeof(stream_buf_t); i++) {
+		bufs[i].max_buffer_delay_ms=val;
+	}
+    return size;
+}
+static ssize_t show_maxdelay(struct class *class, struct class_attribute *attr, char *buf)
+{
+    ssize_t size=0;
+	size+=sprintf(buf, "%dms	//video max buffered data delay ms\n",bufs[0].max_buffer_delay_ms);
+	size+=sprintf(buf, "%dms	//audio max buffered data delay ms\n",bufs[1].max_buffer_delay_ms);
+    return size;
+}
+
+
 static struct class_attribute amstream_class_attrs[] = {
     __ATTR_RO(ports),
     __ATTR_RO(bufs),
     __ATTR_RO(vcodec_profile),   
     __ATTR(karaok, S_IRUGO | S_IWUGO, show_karaok,  store_karaok),
+    __ATTR(max_buffer_delay_ms, S_IRUGO | S_IWUSR | S_IWGRP, show_maxdelay, store_maxdelay),
     __ATTR_NULL
 };
 static struct class amstream_class = {

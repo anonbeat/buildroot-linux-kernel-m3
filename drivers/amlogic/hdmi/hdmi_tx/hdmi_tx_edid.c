@@ -13,7 +13,11 @@
 #include <linux/mutex.h>
 #include <linux/cdev.h>
 #include <asm/uaccess.h>
+#include <mach/am_regs.h>
 #include "m1/hdmi_tx_reg.h"
+#include <crypto/hash.h>
+#include <linux/crypto.h>
+#include <linux/scatterlist.h>
 
 #else
 #include "ioapi.h"
@@ -47,6 +51,12 @@
 #define HDMI_EDID_BLOCK_TYPE_VESA         5
 #define HDMI_EDID_BLOCK_TYPE_EXTENDED_TAG 7
 
+#define EDID_DETAILED_TIMING_DES_BLOCK0_POS 0x36
+#define EDID_DETAILED_TIMING_DES_BLOCK1_POS 0x48
+#define EDID_DETAILED_TIMING_DES_BLOCK2_POS 0x5A
+#define EDID_DETAILED_TIMING_DES_BLOCK3_POS 0x6C
+
+
 //-----------------------------------------------------------
 static int Edid_DecodeHeader(HDMI_TX_INFO_t *info, unsigned char *buff)
 {
@@ -68,6 +78,48 @@ static int Edid_DecodeHeader(HDMI_TX_INFO_t *info, unsigned char *buff)
             ret = -1;
     	}
     return ret;
+}
+
+static void Edid_ReceiverBrandNameParse(rx_cap_t * pRxCap, unsigned char * data)
+{
+    int i;
+    unsigned char uppercase[26] = { 0 };
+    unsigned char brand[3];
+
+    // Fill array uppercase with 'A' to 'Z'
+    for(i = 0; i < 26; i++)
+        uppercase[i] = 'A' + i;
+
+    brand[0] = data[0] >> 2;
+    brand[1] = ((data[0] & 0x3) << 3) + (data[1] >> 5);
+    brand[2] = data[1] & 0x1f;
+
+    for(i = 0; i < 3; i++) {
+        pRxCap->ReceiverBrandName[i] = uppercase[brand[i] - 1];
+    }
+}
+
+static int Edid_find_name_block(unsigned char * data)
+{
+    int ret = 0;
+    int i;
+    for(i = 0; i < 3; i++) {
+        if(data[i])
+            return ret;
+    }
+    if(data[3] == 0xfc)
+        ret = 1;
+    return ret;
+}
+
+static void Edid_ReceiverProductNameParse(rx_cap_t * pRxCap, unsigned char * data)
+{
+    int i = 0;
+    while((data[i] != 0x0a) && (data[i] != 0x20) && (i < 13)) {  // some Display Product name end with 0x20, not 0x0a
+        pRxCap->ReceiverProductName[i] = data[i];
+        i++;
+    }
+    pRxCap->ReceiverProductName[i] = '\0';
 }
 
 void Edid_DecodeStandardTiming(HDMI_TX_INFO_t * info, unsigned char * Data, unsigned char length)
@@ -191,6 +243,7 @@ void Edid_CompareTimingDescriptors(HDMI_TX_INFO_t * info, unsigned char *Data)
         }
         if(index2==12)
         {
+
             switch(index1)
             {
                 case 0:
@@ -321,6 +374,8 @@ int Edid_Parse_check_HDMI_VSDB(HDMI_TX_INFO_t * info, unsigned char *buff)
     else {
         vsdb_phy_addr_t *tmp = &info->vsdb_phy_addr;
         if(tmp->valid){
+            WRITE_AOBUS_REG(AO_DEBUG_REG1, (((tmp->a) & 0xf) << 12) | (((tmp->b) & 0xf) << 8) | (((tmp->c) & 0xf) << 4) | ((tmp->d) & 0xf));
+            printk("HDMI CEC: READ_AOBUS_REG(AO_DEBUG_REG1) Physical address: 0x%x\n", READ_AOBUS_REG(AO_DEBUG_REG1));
             printk("CEC: Physical address: %1x.%1x.%1x.%1x\n", tmp->a, tmp->b, tmp->c, tmp->d);
         }
     }
@@ -619,6 +674,7 @@ static void Edid_ParsingAudioDATABlock(HDMI_TX_INFO_t * info, unsigned char *Dat
        	              if((Data[i+1]&0x40))
        	              	info->tv_audio_info._One_Bit_Audio._192k = 1;
        	              if((Data[i+1]&0x20))
+
        	              	info->tv_audio_info._One_Bit_Audio._176k = 1;
        	              if((Data[i+1]&0x10))
        	              	info->tv_audio_info._One_Bit_Audio._96k = 1;
@@ -847,6 +903,67 @@ int Edid_ParsingCEADataBlockCollection(HDMI_TX_INFO_t * info, unsigned char *buf
 }
 
 //-----------------------------------------------------------
+
+//parse Sink 3D information
+static int hdmitx_edid_3d_parse(rx_cap_t* pRXCap, unsigned char *dat, unsigned size)
+{
+    int j = 0;
+    int bit = 16;
+    unsigned int base = 0;
+    unsigned int pos = base + 1;
+
+    if(dat[base] & (1<<7))
+        pos += 2;
+    if(dat[base] & (1<<6))
+        pos += 2;
+    if(dat[base] & (1<<5)){
+        pRXCap->threeD_present = dat[pos] >> 7;
+        pRXCap->threeD_Multi_present = (dat[pos] >> 5) & 0x3;
+        pos += 1;
+        pRXCap->HDMI_VIC_LEN = (dat[pos] ) >> 5;
+        pRXCap->HDMI_3D_LEN = (dat[pos] ) & 0x1f;
+        pos += pRXCap->HDMI_VIC_LEN + 1;
+        if((pRXCap->threeD_Multi_present == 0x01) || (pRXCap->threeD_Multi_present == 0x2)) {
+            pRXCap->threeD_Structure_ALL_15_0 = (dat[pos] << 8) + dat[pos+1];
+            pos +=2;
+        }
+        if(pRXCap->threeD_Multi_present == 0x2) {
+            pRXCap->threeD_MASK_15_0 = (dat[pos] << 8) + dat[pos+1];
+            pos +=2;
+        }
+    }
+    while(pos < size) {
+        if((dat[pos] & 0xf) == 0x0 ){ // frame packing
+            pRXCap->support_3d_format[pRXCap->VIC[((dat[pos] & 0xf0) >> 4)]].frame_packing = 1;
+            pRXCap->support_3d_format[pRXCap->VIC[((dat[pos+1] & 0xf0) >> 4)]].frame_packing = 1;
+        }
+        if((dat[pos] & 0xf) == 0x6 ){ // top and bottom
+            pRXCap->support_3d_format[pRXCap->VIC[((dat[pos] & 0xf0) >> 4)]].top_and_bottom = 1;
+            pRXCap->support_3d_format[pRXCap->VIC[((dat[pos+1] & 0xf0) >> 4)]].top_and_bottom = 1;
+        }
+        if((dat[pos] & 0xf) == 0x8 ){ // top and bottom
+            pRXCap->support_3d_format[pRXCap->VIC[((dat[pos] & 0xf0) >> 4)]].side_by_side = 1;
+            pRXCap->support_3d_format[pRXCap->VIC[((dat[pos+1] & 0xf0) >> 4)]].side_by_side = 1;
+        }
+        pos += 2;
+    }
+
+    while(bit--){
+        if(((pRXCap->threeD_MASK_15_0) >> j) & 0x1)
+            if(pRXCap->threeD_Structure_ALL_15_0 & (1 << 0)) { // frame packing
+                pRXCap->support_3d_format[pRXCap->VIC[j]].frame_packing = 1;
+            }
+            if(pRXCap->threeD_Structure_ALL_15_0 & (1 << 6)) { // top and bottom
+                pRXCap->support_3d_format[pRXCap->VIC[j]].top_and_bottom = 1;
+            }
+            if(pRXCap->threeD_Structure_ALL_15_0 & (1 << 8)) { // top and bottom
+                pRXCap->support_3d_format[pRXCap->VIC[j]].side_by_side = 1;
+            }
+        j++;
+    }
+    return 1;
+}
+
 static int hdmitx_edid_block_parse(hdmitx_dev_t* hdmitx_device, unsigned char *BlockBuf)
 {
     unsigned char offset,End ;
@@ -908,6 +1025,10 @@ static int hdmitx_edid_block_parse(hdmitx_dev_t* hdmitx_device, unsigned char *B
                 /**/
                 pRXCap->ColorDeepSupport = (unsigned long)BlockBuf[offset+5];
                 pRXCap->Max_TMDS_Clock = (unsigned long)BlockBuf[offset+6]; 
+
+                if(count > 7)
+                    hdmitx_edid_3d_parse(pRXCap, &BlockBuf[offset+7], count - 7);
+
                 offset += count ; // ignore the remaind.
                 break ;
             
@@ -946,14 +1067,53 @@ static void hdmitx_edid_set_default_vic(hdmitx_dev_t* hdmitx_device)
     printk("HDMI: set default vic\n");
 }
 
+#if 0
+#define PRINT_HASH(hash) {printk("%s:%d ",__func__,__LINE__);int __i;for(__i=0;__i<20;__i++)printk("%02x,",hash[__i]);printk("\n");}
+#else
+#define PRINT_HASH(hash) 
+#endif
+
+static int edid_hash_calc(unsigned char *hash, const char *data, unsigned int len)
+{
+    struct scatterlist sg;
+
+    struct crypto_hash *tfm;
+    struct hash_desc desc;
+
+    tfm = crypto_alloc_hash("sha1", 0, CRYPTO_ALG_ASYNC);
+    PRINT_HASH(hash);
+    if (IS_ERR(tfm))
+        return -EINVAL;
+
+    PRINT_HASH(hash);
+    /* ... set up the scatterlists ... */
+    sg_init_one(&sg, (u8 *) data, len);
+    desc.tfm = tfm;
+    desc.flags = 0;
+
+    if (crypto_hash_digest(&desc, &sg,len, hash))
+        return -EINVAL;
+    PRINT_HASH(hash);
+    crypto_free_hash(tfm);
+    return 1;
+}
+
+
 int hdmitx_edid_parse(hdmitx_dev_t* hdmitx_device)
 {
     unsigned char CheckSum ;
+    unsigned char zero_numbers;
     unsigned char BlockCount ;
     unsigned char* EDID_buf = hdmitx_device->EDID_buf;
     int i, j, ret_val ;
+    int idx[4];
     rx_cap_t* pRXCap = &(hdmitx_device->RXCap);
     hdmi_print(0, "EDID Parser:\n");
+
+    // Calculate the EDID hash for special use
+    memset(hdmitx_device->EDID_hash, 0, ARRAY_SIZE(hdmitx_device->EDID_hash));
+    edid_hash_calc(hdmitx_device->EDID_hash, hdmitx_device->EDID_buf, 256);
+
     ret_val = Edid_DecodeHeader(&hdmitx_device->hdmi_info, &EDID_buf[0]);
 
 //    if(ret_val == -1)
@@ -972,6 +1132,16 @@ int hdmitx_edid_parse(hdmitx_dev_t* hdmitx_device)
 //        return -1 ;
     }
 	
+    Edid_ReceiverBrandNameParse(&hdmitx_device->RXCap, &EDID_buf[8]);
+
+    idx[0] = EDID_DETAILED_TIMING_DES_BLOCK0_POS;
+    idx[1] = EDID_DETAILED_TIMING_DES_BLOCK1_POS;
+    idx[2] = EDID_DETAILED_TIMING_DES_BLOCK2_POS;
+    idx[3] = EDID_DETAILED_TIMING_DES_BLOCK3_POS;
+    for(i = 0; i < 4; i++) {
+        if(Edid_find_name_block(&EDID_buf[idx[i]]))
+            Edid_ReceiverProductNameParse(&hdmitx_device->RXCap, &EDID_buf[idx[i]+5]);
+    }
     Edid_DecodeStandardTiming(&hdmitx_device->hdmi_info, &EDID_buf[26], 8);
     Edid_ParseCEADetailedTimingDescriptors(&hdmitx_device->hdmi_info, 4, 0x36, &EDID_buf[0]);
 
@@ -981,7 +1151,30 @@ int hdmitx_edid_parse(hdmitx_dev_t* hdmitx_device)
         hdmitx_device->hdmi_info.output_state = CABLE_PLUGIN_DVI_OUT;
         hdmi_print(0, "EDID BlockCount=0\n");
         hdmitx_edid_set_default_vic(hdmitx_device);
+
+        // DVI case judgement: only contains one block and checksum valid
+        CheckSum = 0;
+        zero_numbers = 0;
+        for(i = 0; i < 128; i++) {
+            CheckSum += EDID_buf[i];
+            if(EDID_buf[i] == 0)
+                zero_numbers ++;
+        }
+        printk("HDMI: edid blk0 checksum:%d ext_flag:%d\n",CheckSum, EDID_buf[0x7e]);
+        if((CheckSum & 0xff) == 0) {
+            hdmitx_device->RXCap.IEEEOUI = 0;
+        } else {
+            hdmitx_device->RXCap.IEEEOUI = 0x0c03;
+        }
+        if(zero_numbers > 120)
+            hdmitx_device->RXCap.IEEEOUI = 0x0c03;
+
         return 0 ; // do nothing.
+    }
+
+    if((BlockCount == 1) && (EDID_buf[0x81] == 1)) {    // Note: some DVI monitor have more than 1 block
+        hdmitx_device->RXCap.IEEEOUI = 0;
+        return 0;
     }
 
     else if ( BlockCount > EDID_MAX_BLOCK )
@@ -1064,8 +1257,8 @@ static dispmode_vic_t dispmode_VIC_tab[]=
     {"720p", HDMI_720p60},
     {"1080i", HDMI_1080i60},
     {"1080p", HDMI_1080p60},
-    {"1080P30", HDMI_1080p30},
-    {"1080P24", HDMI_1080p24},
+    {"1080p30hz", HDMI_1080p30},
+    {"1080p24hz", HDMI_1080p24},
     {"720p50hz", HDMI_720p50},
     {"1080i50hz", HDMI_1080i50},
     {"1080p50hz", HDMI_1080p50},
@@ -1168,7 +1361,8 @@ void hdmitx_edid_clear(hdmitx_dev_t* hdmitx_device)
     hdmitx_device->vic_count=0;
     pRXCap->VIC_count = 0;
     pRXCap->AUD_count = 0;
-    pRXCap->IEEEOUI = 0;
+    // Note: in most cases, we think that rx is tv and the default IEEEOUI is HDMI Identifier
+    pRXCap->IEEEOUI = 0x000c03;
     pRXCap->native_Mode = 0;
     pRXCap->native_VIC = 0xff;
     pRXCap->RxSpeakerAllocation = 0;
@@ -1178,12 +1372,30 @@ void hdmitx_edid_clear(hdmitx_dev_t* hdmitx_device)
     hdmitx_device->hdmi_info.vsdb_phy_addr.d = 0;
     hdmitx_device->hdmi_info.vsdb_phy_addr.valid = 0;
     memset(&vsdb_local, 0, sizeof(vsdb_phy_addr_t));    
+    pRXCap->Video_Latency = 0;
+    pRXCap->Audio_Latency = 0;
+    pRXCap->Interlaced_Video_Latency=0;
+    pRXCap->Interlaced_Audio_Latency=0;
+    pRXCap->threeD_present=0;
+    pRXCap->threeD_Multi_present=0;
+    pRXCap->HDMI_VIC_LEN=0;
+    pRXCap->HDMI_3D_LEN=0;
+    pRXCap->threeD_Structure_ALL_15_0=0;
+    pRXCap->threeD_MASK_15_0=0;
+    memset(pRXCap->ReceiverBrandName, 0, sizeof(pRXCap->ReceiverBrandName));
+    memset(pRXCap->ReceiverProductName, 0, sizeof(pRXCap->ReceiverProductName));
+    memset(&hdmitx_device->RXCap.support_3d_format[0], 0, sizeof(hdmitx_device->RXCap.support_3d_format));
+    memset(&hdmitx_device->EDID_hash[0], 0, sizeof(hdmitx_device->EDID_hash));
 }
 
 int hdmitx_edid_dump(hdmitx_dev_t* hdmitx_device, char* buffer, int buffer_len)
 {
     int i,pos=0;
     rx_cap_t* pRXCap = &(hdmitx_device->RXCap);
+
+    pos+=snprintf(buffer+pos, buffer_len-pos, "Receiver Brand Name: %s\r\n", pRXCap->ReceiverBrandName);
+    pos+=snprintf(buffer+pos, buffer_len-pos, "Receiver Product Name: %s\r\n", pRXCap->ReceiverProductName);
+
     pos+=snprintf(buffer+pos, buffer_len-pos, "EDID block number: 0x%x\r\n",hdmitx_device->EDID_buf[0x7e]);
 
     pos+=snprintf(buffer+pos, buffer_len-pos, "Source Physical Address[a.b.c.d]: %x.%x.%x.%x\r\n",
@@ -1201,13 +1413,20 @@ int hdmitx_edid_dump(hdmitx_dev_t* hdmitx_device, char* buffer, int buffer_len)
     }
     pos+=snprintf(buffer+pos, buffer_len-pos,"\r\n");
     pos+=snprintf(buffer+pos, buffer_len-pos, "Audio {format, channel, freq, cce}\r\n");
-    for( i =0; i< pRXCap->AUD_count; i++)
-    {
+    for( i =0; i< pRXCap->AUD_count; i++) {
         pos+=snprintf(buffer+pos, buffer_len-pos, "{%d, %d, %x, %x}\r\n", pRXCap->RxAudioCap[i].audio_format_code,
             pRXCap->RxAudioCap[i].channel_num_max, pRXCap->RxAudioCap[i].freq_cc, pRXCap->RxAudioCap[i].cc3);
     }
     pos+=snprintf(buffer+pos,buffer_len-pos,"Speaker Allocation: %x\r\n", pRXCap->RxSpeakerAllocation);
     pos+=snprintf(buffer+pos,buffer_len-pos,"Vendor: %x\r\n", pRXCap->IEEEOUI);
+
+    pos+=snprintf(buffer+pos,buffer_len-pos,"Rx 3D Format Support List:\r\n{VIC FramePacking TopBottom SidebySide}\r\n");
+    for(i = 0 ; i < pRXCap->VIC_count; i++){
+        pos+=snprintf(buffer+pos,buffer_len-pos,"{ %d\t%d\t%d\t%d }\n", pRXCap->VIC[i], 
+                                                                   pRXCap->support_3d_format[pRXCap->VIC[i]].frame_packing,
+                                                                   pRXCap->support_3d_format[pRXCap->VIC[i]].top_and_bottom,
+                                                                   pRXCap->support_3d_format[pRXCap->VIC[i]].side_by_side);
+    }
     return pos;        
 }    
 

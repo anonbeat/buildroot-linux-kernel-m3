@@ -1,6 +1,4 @@
 
-
-
 #ifndef _AVL6211SF_H_
 #define _AVL6211SF_H_
 

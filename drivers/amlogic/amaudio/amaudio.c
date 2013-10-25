@@ -63,8 +63,8 @@ extern void audio_i2s_swap_left_right(unsigned int flag);
 extern int audio_out_buf_ready ;
 extern int audio_in_buf_ready;
 
-extern unsigned int aml_pcm_playback_start_addr;
-extern unsigned int aml_pcm_capture_start_addr;
+extern unsigned int aml_i2s_playback_start_addr;
+extern unsigned int aml_i2s_capture_start_addr;
 
 static dev_t amaudio_devno;
 static struct class* amaudio_clsp;
@@ -89,9 +89,6 @@ static unsigned int enable_resample_flag=0;
 static unsigned int resample_type_flag=0; //0-->no resample  processing
                                            //1-->down resample processing
                                            //2-->up     resample processing
-/*resample update for sync*/
-extern unsigned int timestamp_enable_resample_flag;
-extern unsigned int timestamp_resample_type_flag;
 //--------------------------------------------
 #define DEBUG_DUMP 1
 
@@ -100,7 +97,7 @@ static unsigned int dump_size = 512*1024;
 static unsigned int dump_off = 0;
 
 
-extern int aml_pcm_playback_enable;
+extern int aml_i2s_playback_enable;
 extern unsigned int dac_mute_const;
 
 static unsigned int audio_in_int_cnt = 0;
@@ -1171,7 +1168,7 @@ static int amaudio_open(struct inode *inode, struct file *file)
   int tmp=0;
   if (audio_in_buf_ready && iminor(inode)== 1){
     amaudio->in_size  = READ_MPEG_REG(AUDIN_FIFO0_END) - READ_MPEG_REG(AUDIN_FIFO0_START) + 8;
-    amaudio->in_start = aml_pcm_capture_start_addr;
+    amaudio->in_start = aml_i2s_capture_start_addr;
     amaudio->in_rd_ptr = 0;
     amaudio->in_wr_ptr = 0;
     memcpy(&amaudio_in, amaudio, sizeof(amaudio_t));
@@ -1179,7 +1176,7 @@ static int amaudio_open(struct inode *inode, struct file *file)
   
   if (audio_out_buf_ready && iminor(inode) == 0){
     amaudio->out_size = READ_MPEG_REG(AIU_MEM_I2S_END_PTR) - READ_MPEG_REG(AIU_MEM_I2S_START_PTR) + 64;
-    amaudio->out_start = aml_pcm_playback_start_addr;
+    amaudio->out_start = aml_i2s_playback_start_addr;
     amaudio->out_wr_ptr = 0;
     amaudio->out_rd_ptr = 0;
     
@@ -1526,16 +1523,16 @@ static ssize_t store_mic_mix(struct class* class, struct class_attribute* attr,
 static ssize_t show_alsa_out(struct class* class, struct class_attribute* attr,
     char* buf)
 {
-  return sprintf(buf, "ALSA OUT %s\n", aml_pcm_playback_enable? "ON": "OFF");
+  return sprintf(buf, "ALSA OUT %s\n", aml_i2s_playback_enable? "ON": "OFF");
 }
 
 static ssize_t store_alsa_out(struct class* class, struct class_attribute* attr,
    const char* buf, size_t count )
 {
   if(buf[0] == '0'){
-    aml_pcm_playback_enable = 0;
+    aml_i2s_playback_enable = 0;
   }else if(buf[0] == '1'){
-    aml_pcm_playback_enable = 1;
+    aml_i2s_playback_enable = 1;
   }
   return count;
 }
@@ -1689,10 +1686,8 @@ static ssize_t store_enable_resample(struct class* class, struct class_attribute
 {
   if(buf[0] == '0'){
     enable_resample_flag = 0;
-    timestamp_enable_resample_flag = 0;
   }else if(buf[0] == '1'){
     enable_resample_flag = 1;
-    timestamp_enable_resample_flag = 1;
   }
   return count;
 }
@@ -1714,13 +1709,10 @@ static ssize_t store_resample_type(struct class* class, struct class_attribute* 
 {
   if(buf[0] == '0'){ 
     resample_type_flag = 0;  //0-->no resample  processing
-    timestamp_resample_type_flag = 0;
   }else if(buf[0] == '1'){     
     resample_type_flag = 1;  //1-->down resample processing
-    timestamp_resample_type_flag = 1;
   }else if(buf[0] == '2'){
     resample_type_flag = 2;  //2-->up resample processing
-    timestamp_resample_type_flag = 2;
   }
   return count;
 }
@@ -1768,7 +1760,8 @@ static void create_amaudio_attrs(struct class* class)
 {
   int i=0;
   for(i=0; amaudio_attrs[i].attr.name; i++){
-    class_create_file(class, &amaudio_attrs[i]);
+    if(class_create_file(class, &amaudio_attrs[i]) < 0)
+      break;
   }
 }
 

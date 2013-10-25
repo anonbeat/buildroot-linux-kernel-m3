@@ -251,6 +251,11 @@ static const reg_t tvregs_480i[] = {
     {ENCP_VIDEO_EN,              0,     },
 #endif    
     {ENCI_VIDEO_EN,              1,     },
+    {VENC_VDAC_DAC3_GAINCTRL,	 0x15	},
+    {ENCI_VIDEO_BRIGHT,		 	 0x2	},
+    {ENCI_VIDEO_SAT,		 	 0xfe	},
+    {VENC_VDAC_DAC3_FILT_CTRL0,	 0x1	},
+    {VENC_VDAC_DAC3_FILT_CTRL1,	 0xf850	},
     {MREG_END_MARKER,            0      }
 };
 
@@ -279,7 +284,7 @@ static const reg_t tvregs_480cvbs[] = {
     {ENCI_VIDEO_SCH,             0x20,  },
     {ENCI_SYNC_MODE,             0x07,  },
     {ENCI_MACV_N0,               0,     },
-    {ENCI_YC_DELAY,                0x371, },
+    {ENCI_YC_DELAY,                0x345, },
     {ENCI_VFIFO2VD_PIXEL_START,    0xf3,  },
     {ENCI_VFIFO2VD_PIXEL_END,      0x0693,},
     {ENCI_VFIFO2VD_LINE_TOP_START, 0x12,  },
@@ -316,6 +321,11 @@ static const reg_t tvregs_480cvbs[] = {
     {ENCI_DACSEL_1,                   0x11       },
 #endif    
     {ENCI_VIDEO_EN,              1,     },
+    {VENC_VDAC_DAC3_GAINCTRL,	 0x15	},
+    {ENCI_VIDEO_BRIGHT,		 	 0x2	},
+    {ENCI_VIDEO_SAT,		 	 0xfe	},
+    {VENC_VDAC_DAC3_FILT_CTRL0,	 0x1	},
+    {VENC_VDAC_DAC3_FILT_CTRL1,	 0xf850	},
     {MREG_END_MARKER,            0      }
 };
 
@@ -444,6 +454,11 @@ static const reg_t tvregs_576i[] = {
     {ENCP_VIDEO_EN,              0,     },
 #endif    
     {ENCI_VIDEO_EN,              1,     },
+    {VENC_VDAC_DAC3_GAINCTRL,	 0x15	},
+    {ENCI_VIDEO_SAT,		 0xa	},
+    {VENC_VDAC_DAC3_FILT_CTRL0,	 0x1	},
+    {VENC_VDAC_DAC3_FILT_CTRL1,	 0xfe44	},
+    {ENCI_SYNC_ADJ,		 0x8400 },
     {MREG_END_MARKER,            0      }
 };
 
@@ -473,7 +488,7 @@ static const reg_t tvregs_576cvbs[] = {
     {ENCI_VIDEO_SCH,             0x28,  },
     {ENCI_SYNC_MODE,             0x07,  },
     {ENCI_MACV_N0,               0,     },
-    {ENCI_YC_DELAY,              0x371, },
+    {ENCI_YC_DELAY,              0x333, },
     {ENCI_VFIFO2VD_PIXEL_START,       0x010b     },
     {ENCI_VFIFO2VD_PIXEL_END,         0x06ab     },
     {ENCI_VFIFO2VD_LINE_TOP_START,    0x0016     },
@@ -510,6 +525,11 @@ static const reg_t tvregs_576cvbs[] = {
     {ENCI_DACSEL_1,                   0x11       },
 #endif    
     {ENCI_VIDEO_EN,              1,     },
+    {VENC_VDAC_DAC3_GAINCTRL,	 0x15	},
+    {ENCI_VIDEO_SAT,		 0xa	},
+    {VENC_VDAC_DAC3_FILT_CTRL0,	 0x1	},
+    {VENC_VDAC_DAC3_FILT_CTRL1,	 0xfe44	},
+	{ENCI_SYNC_ADJ,		 0x8400 },
     {MREG_END_MARKER,            0      }
 };
 
