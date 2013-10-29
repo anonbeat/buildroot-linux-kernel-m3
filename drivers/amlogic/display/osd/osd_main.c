@@ -1229,7 +1229,7 @@ EXPORT_SYMBOL(osd_resume_early);
 #endif
 
 
-#if defined(CONFIG_MACH_MESON3_REFF16 || defined(CONFIG_MACH_MESON3_STV_MBX_MC)
+#if 0 // def CONFIG_MACH_MESON3_REFF16
 int  __init  get_resolution(char *str)
 {
     int status = 0;
