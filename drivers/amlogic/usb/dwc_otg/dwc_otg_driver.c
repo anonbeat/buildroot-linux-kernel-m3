@@ -1050,6 +1050,11 @@ static int __init dwc_otg_driver_probe(struct lm_device *_lmdev)
 		_lmdev->set_vbus_valid_ext(_lmdev->id,0);
 #endif
 
+#ifdef CONFIG_USB_DPLINE_PULLUP_DISABLE
+	if(_lmdev->set_vbus_valid_ext)
+		_lmdev->set_vbus_valid_ext(_lmdev->id,0);
+#endif
+
 	return 0;
 
       fail:
