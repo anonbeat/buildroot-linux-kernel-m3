@@ -1060,7 +1060,7 @@ CONFIG_CMEM=m
 #
 # Mali 400 UMP device driver
 #
-CONFIG_UMP=m
+# CONFIG_UMP is not set
 
 #
 # Mali 400 GPU OpenGL device driver
