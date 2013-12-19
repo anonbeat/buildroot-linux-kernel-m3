@@ -630,11 +630,11 @@ static struct mtd_partition multi_partition_info_1G_or_More[] =
 	{
         .name = "system",
         .offset = 64*1024*1024,
-        .size = 512*1024*1024,
+        .size = 516*1024*1024,
     },
     {
         .name = "cache",
-        .offset = 576*1024*1024,
+        .offset = 580*1024*1024,
         .size = 192*1024*1024,
     },
 #ifdef CONFIG_AML_NFTL
