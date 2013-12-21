@@ -614,27 +614,27 @@ static struct mtd_partition multi_partition_info_1G_or_More[] =
 #endif
     {
 	.name = "aml_logo",
-	.offset = 12*1024*1024,
+	.offset = 8*1024*1024,
 	.size = 16*1024*1024,
     },
     {
         .name = "recovery",
-        .offset = 28*1024*1024,
+        .offset = 24*1024*1024,
         .size = 16*1024*1024,
     },
     {
         .name = "boot",
-        .offset = 44*1024*1024,
+        .offset = 40*1024*1024,
         .size = 20*1024*1024,
     },
 	{
         .name = "system",
-        .offset = 64*1024*1024,
+        .offset = 60*1024*1024,
         .size = 516*1024*1024,
     },
     {
         .name = "cache",
-        .offset = 580*1024*1024,
+        .offset = 576*1024*1024,
         .size = 192*1024*1024,
     },
 #ifdef CONFIG_AML_NFTL
