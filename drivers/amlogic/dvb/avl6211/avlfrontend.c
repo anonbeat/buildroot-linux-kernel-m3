@@ -8,8 +8,10 @@
 **        Driver for AVL6211 demodulator
 **  author :
 **	    Shijie.Rong@amlogic
+**	    SmartHD@comag.tv
 **  version :
 **	    v1.0	 12/3/30
+**	    v1.1	 14/3/30
 *****************************************************************/
 
 /*
@@ -442,19 +444,25 @@ static int AVL6211_Read_Ber(struct dvb_frontend *fe, u32 * ber)
 
 static int AVL6211_Read_Signal_Strength(struct dvb_frontend *fe, u16 *strength)
 {
+	u16 r_strength;
 	if(1==blindstart)
 		return ;
-	*strength=AVL_Get_Level_Percent(pAVLChip_all);
+	r_strength=AVL_Get_Level_Percent(pAVLChip_all);
 //	*strength=AVL6211_GETSignalLevel();
+//  [0% - 100%] => [0 - 65535]
+    *strength=(u16)r_strength/ 100 * 65535;
 	return 0;
 }
 
 static int AVL6211_Read_Snr(struct dvb_frontend *fe, u16 * snr)
 {
+	u16 r_snr;
 	if(1==blindstart)
 		return ;
-	*snr=AVL_Get_Quality_Percent(pAVLChip_all);
+	r_snr=AVL_Get_Quality_Percent(pAVLChip_all);
 	//*snr=AVL6211_GETSnr();
+//  [0% - 100%] => [0 - 65535]
+    *snr=(u16)r_snr/100*65535;
 	return 0;
 }
 
@@ -466,6 +474,7 @@ static int AVL6211_Read_Ucblocks(struct dvb_frontend *fe, u32 * ucblocks)
 
 static int AVL6211_Set_Frontend(struct dvb_frontend *fe, struct dvb_frontend_parameters *p)
 {
+	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 	if(initflag!=0)
 	{
 		pr_dbg("[%s] avl6211 init fail\n",__FUNCTION__);
@@ -476,15 +485,15 @@ static int AVL6211_Set_Frontend(struct dvb_frontend *fe, struct dvb_frontend_par
 	if(1==blindstart)
 		return;
 	AVL_DVBSx_IBSP_WaitSemaphore(&blindscanSem);
-	if((850000>p->frequency)||(p->frequency>2300000))
+	if((850000>c->frequency)||(c->frequency>2300000))
 	{
-			p->frequency =945000;
+			c->frequency =945000;
 			pr_dbg("freq is out of range,force to set 945000khz\n");
 	}
 	struct avl6211_state *state = fe->demodulator_priv;
 	struct AVL_DVBSx_Channel Channel;
 	AVL_DVBSx_ErrorCode r = AVL_DVBSx_EC_OK;
-	avl6211pTuner->m_uiFrequency_100kHz=p->frequency/100;
+	avl6211pTuner->m_uiFrequency_100kHz=c->frequency/100;
 //	avl6211pTuner->m_uiFrequency_100kHz=15000;
 //	printk("avl6211pTuner m_uiFrequency_100kHz is %d",avl6211pTuner->m_uiFrequency_100kHz);
 	
@@ -497,16 +506,16 @@ static int AVL6211_Set_Frontend(struct dvb_frontend *fe, struct dvb_frontend_par
 
 	//Change the value defined by macro and go back here when we want to lock a new channel.
 //	avl6211pTuner->m_uiFrequency_100kHz = tuner_freq*10;      
-	avl6211pTuner->m_uiSymbolRate_Hz = p->u.qam.symbol_rate;//p->u.qam.symbol_rate;//30000000; //symbol rate of the channel to be locked.
+	avl6211pTuner->m_uiSymbolRate_Hz = c->symbol_rate;//p->u.qam.symbol_rate;//30000000; //symbol rate of the channel to be locked.
 	//This function should be called before locking the tuner to adjust the tuner LPF based on channel symbol rate.
 	AVL_Set_LPF(avl6211pTuner, avl6211pTuner->m_uiSymbolRate_Hz);
 
 	r=avl6211pTuner->m_pLockFunc(avl6211pTuner);
 	if (AVL_DVBSx_EC_OK != r)
 	{
-		state->freq=p->frequency;
-		state->mode=p->u.qam.modulation ;
-		state->symbol_rate=p->u.qam.symbol_rate;
+		state->freq=c->frequency;
+//		state->mode=p->u.qam.modulation ;
+		state->symbol_rate=c->symbol_rate;
 		
  		pr_dbg("Tuner test failed !\n");
 		return (r);
@@ -535,7 +544,7 @@ static int AVL6211_Set_Frontend(struct dvb_frontend *fe, struct dvb_frontend_par
 	}
 	//This function should be called after tuner locked to lock the channel.
 	#else
-	Channel.m_uiSymbolRate_Hz = p->u.qam.symbol_rate;
+	Channel.m_uiSymbolRate_Hz = c->symbol_rate;
 	Channel.m_Flags = (CI_FLAG_IQ_NO_SWAPPED) << CI_FLAG_IQ_BIT;	//Normal IQ
 	Channel.m_Flags |= (CI_FLAG_IQ_AUTO_BIT_AUTO) << CI_FLAG_IQ_AUTO_BIT;	//Enable automatic IQ swap detection
 	Channel.m_Flags |= (CI_FLAG_DVBS2_UNDEF) << CI_FLAG_DVBS2_BIT;			//Enable automatic standard detection
@@ -543,9 +552,9 @@ static int AVL6211_Set_Frontend(struct dvb_frontend *fe, struct dvb_frontend_par
 	r = AVL_DVBSx_IRx_LockChannel(&Channel, pAVLChip_all);  
 	if (AVL_DVBSx_EC_OK != r)
 	{
-		state->freq=p->frequency;
-		state->mode=p->u.qam.modulation ;
-		state->symbol_rate=p->u.qam.symbol_rate;	
+		state->freq=c->frequency;
+//		state->mode=p->u.qam.modulation ;
+		state->symbol_rate=c->symbol_rate;	
 		
 		pr_dbg("Lock channel failed !\n");
 		return (r);
@@ -558,11 +567,11 @@ static int AVL6211_Set_Frontend(struct dvb_frontend *fe, struct dvb_frontend_par
 	}
 	int waittime=150;//3s 
 	//Channel lock time increase while symbol rate decrease.Give the max waiting time for different symbolrates.
-	if(p->u.qam.symbol_rate<5000000)
+	if(c->symbol_rate<5000000)
 	{
 		waittime = 250;       //The max waiting time is 5000ms,considering the IQ swapped status the time should be doubled.
 	}
-	else if(p->u.qam.symbol_rate<10000000)
+	else if(c->symbol_rate<10000000)
 	{
         waittime = 30;        //The max waiting time is 600ms,considering the IQ swapped status the time should be doubled.
 	}
@@ -587,31 +596,31 @@ static int AVL6211_Set_Frontend(struct dvb_frontend *fe, struct dvb_frontend_par
 	r=AVL_DVBSx_IRx_ResetErrorStat(pAVLChip_all);
 	if (AVL_DVBSx_EC_OK != r)
 	{
-		state->freq=p->frequency;
-		state->mode=p->u.qam.modulation ;
-		state->symbol_rate=p->u.qam.symbol_rate;
+		state->freq=c->frequency;
+//		state->mode=p->u.qam.modulation ;
+		state->symbol_rate=c->symbol_rate;
 		
 		printf("Reset error status failed !\n");
 		return (r);
 	}
 	
 //	demod_connect(state, p->frequency,p->u.qam.modulation,p->u.qam.symbol_rate);
-	state->freq=p->frequency;
-	state->mode=p->u.qam.modulation ;
-	state->symbol_rate=p->u.qam.symbol_rate; //these data will be writed to eeprom
+	state->freq=c->frequency;
+//	state->mode=p->u.qam.modulation ;
+	state->symbol_rate=c->symbol_rate; //these data will be writed to eeprom
 
-	pr_dbg("avl6211=>frequency=%d,symbol_rate=%d\r\n",p->frequency,p->u.qam.symbol_rate);
+	pr_dbg("avl6211=>frequency=%d,symbol_rate=%d\r\n",c->frequency,c->symbol_rate);
 	return  0;
 }
 
 static int AVL6211_Get_Frontend(struct dvb_frontend *fe, struct dvb_frontend_parameters *p)
 {//these content will be writed into eeprom .
-
+	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 	struct avl6211_state *state = fe->demodulator_priv;
 	
-	p->frequency=state->freq;
-	p->u.qam.modulation=state->mode;
-	p->u.qam.symbol_rate=state->symbol_rate;
+	c->frequency=state->freq;
+//	p->u.qam.modulation=state->mode;
+	c->symbol_rate=state->symbol_rate;
 	
 	return 0;
 }
@@ -662,59 +671,39 @@ struct dvb_frontend *avl6211_attach(const struct avl6211_fe_config *config)
 }
 
 static struct dvb_frontend_ops avl6211_ops = {
+    .info = {
+        .name = "AMLOGIC DVB-S2",
+        .type = FE_QPSK,
+        .frequency_min = 850000,
+        .frequency_max = 2300000,
+        .frequency_stepsize = 1011, /* kHz for QPSK frontends */
+        .frequency_tolerance = 5000,
+        .symbol_rate_min = 800000, /* Min = 800K */
+        .symbol_rate_max = 50000000, /* Max = 50M */
+        .symbol_rate_tolerance  = 500,  /* ppm */
+        .caps = FE_CAN_INVERSION_AUTO |
+                FE_CAN_FEC_1_2 | FE_CAN_FEC_2_3 | FE_CAN_FEC_3_4 |
+                FE_CAN_FEC_4_5 | FE_CAN_FEC_5_6 | FE_CAN_FEC_6_7 |
+                FE_CAN_FEC_7_8 | FE_CAN_FEC_AUTO |
+                FE_CAN_2G_MODULATION |
+                FE_CAN_QPSK    | FE_CAN_RECOVER
+    },
 
-
-		.info = {
-		 .name = "AMLOGIC DVB-S2",
-		.type = FE_QPSK,
-		.frequency_min = 850000,
-		.frequency_max = 2300000,
-		.frequency_stepsize = 0,
-		.frequency_tolerance = 0,
-		.caps =
-			FE_CAN_FEC_1_2 | FE_CAN_FEC_2_3 | FE_CAN_FEC_3_4 |
-			FE_CAN_FEC_5_6 | FE_CAN_FEC_7_8 | FE_CAN_FEC_AUTO |
-			FE_CAN_QPSK | FE_CAN_QAM_16 |
-			FE_CAN_QAM_64 | FE_CAN_QAM_AUTO |
-			FE_CAN_TRANSMISSION_MODE_AUTO |
-			FE_CAN_GUARD_INTERVAL_AUTO |
-			FE_CAN_HIERARCHY_AUTO |
-			FE_CAN_RECOVER |
-			FE_CAN_MUTE_TS
-	},
-
-	.release = AVL6211_Release,
-
-	.init = AVL6211_Init,
-	.sleep = AVL6211_Sleep,
-	.i2c_gate_ctrl = AVL6211_I2c_Gate_Ctrl,
-
-	.set_frontend = AVL6211_Set_Frontend,
-	.get_frontend = AVL6211_Get_Frontend,	
-	.read_status = AVL6211_Read_Status,
-	.read_ber = AVL6211_Read_Ber,
-	.read_signal_strength =AVL6211_Read_Signal_Strength,
-	.read_snr = AVL6211_Read_Snr,
-	.read_ucblocks = AVL6211_Read_Ucblocks,
-
-
-	.diseqc_reset_overload = AVL6211_Diseqc_Reset_Overload,
-	.diseqc_send_master_cmd = AVL6211_Diseqc_Send_Master_Cmd,
-	.diseqc_recv_slave_reply = AVL6211_Diseqc_Recv_Slave_Reply,
-	.diseqc_send_burst = AVL6211_Diseqc_Send_Burst,
-	.set_tone = AVL6211_Set_Tone,
-	.set_voltage = AVL6211_Set_Voltage,
-	.enable_high_lnb_voltage = AVL6211_Enable_High_Lnb_Voltage,
-#if avl6211_support	
-
-
-	.blindscan_scan	=	AVL6211_Blindscan_Scan,
-	.blindscan_getscanstatus	=	AVL6211_Blindscan_Getscanstatus,
-	.blindscan_cancel	=	AVL6211_Blindscan_Cancel,
-	.blindscan_readchannelinfo	=	AVL6211_Blindscan_Readchannelinfo,
-	.blindscan_reset	=	AVL6211_Blindscan_Reset,
-#endif
-
+    .release = AVL6211_Release,
+    .init = AVL6211_Init,
+    .sleep = AVL6211_Sleep,
+    .read_status = AVL6211_Read_Status,
+    .read_ber = AVL6211_Read_Ber,
+    .read_signal_strength =AVL6211_Read_Signal_Strength,
+    .read_snr = AVL6211_Read_Snr,
+    .read_ucblocks = AVL6211_Read_Ucblocks,
+    .set_tone = AVL6211_Set_Tone,
+    .set_voltage = AVL6211_Set_Voltage,
+    .diseqc_send_master_cmd = AVL6211_Diseqc_Send_Master_Cmd,
+    .diseqc_send_burst = AVL6211_Diseqc_Send_Burst,
+    
+    .set_frontend = AVL6211_Set_Frontend,
+    .get_frontend = AVL6211_Get_Frontend,
 };
 
 static void avl6211_fe_release(struct aml_dvb *advb, struct aml_fe *fe)
